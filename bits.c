@@ -51,7 +51,13 @@ int bitXor(int x, int y) {
  *   1 if x and y have the same sign , 0 otherwise.
  */
 int samesign(int x, int y) {
-    return 2;
+    if (!x) {
+        return !y;                  /* x 是 0：只有 y 也是 0 才同号 */
+    }
+    if (!y) {
+        return 0;                   /* x 不是 0，y 是 0：不同号 */
+    }
+    return !((x ^ y) >> 31);        /* 都不是 0：比较符号位 */
 }
 
 /*
@@ -64,7 +70,39 @@ int samesign(int x, int y) {
  *   Difficulty: 4
  */
 int logtwo(int v) {
-    return 2;
+    int r, s;   /* r：累计的答案；s：本步要加上的位数 */
+
+    /* 第1步：第16~31位中有没有1？
+     * 有：最高位至少在第16位，r = 1 << 4 = 16，
+     *     再把 v 右移16位，让高16位降到低位继续找
+     * 没有：r = 0，v 不变 */
+    r = ((v >> 16) > 0) << 4;
+    v = v >> r;
+
+    /* 第2步：剩下的部分中，第8位及以上有没有1？
+     * 有则 s = 8，v 右移8位，答案加8 */
+    s = ((v >> 8) > 0) << 3;
+    v = v >> s;
+    r = r | s;
+
+    /* 第3步：第4位及以上有没有1？
+     * 有则 s = 4，v 右移4位，答案加4 */
+    s = ((v >> 4) > 0) << 2;
+    v = v >> s;
+    r = r | s;
+
+    /* 第4步：第2位及以上有没有1？
+     * 有则 s = 2，v 右移2位，答案加2 */
+    s = ((v >> 2) > 0) << 1;
+    v = v >> s;
+    r = r | s;
+
+    /* 第5步：此时 v 只可能是 1、2、3（最多两位）
+     * v 为 2 或 3 时最高位在第1位，v >> 1 = 1，答案加1
+     * v 为 1 时最高位在第0位，v >> 1 = 0，答案不变 */
+    r = r | (v >> 1);
+
+    return r;
 }
 
 /*
@@ -77,7 +115,11 @@ int logtwo(int v) {
  *    Difficulty: 2
  */
 int byteSwap(int x, int n, int m) {
-    return 2;
+    int ns, ms, d;
+    ns = n << 3;                        /* 第 n 字节的起始位 = n * 8 */
+    ms = m << 3;                        /* 第 m 字节的起始位 = m * 8 */
+    d = ((x >> ns) ^ (x >> ms)) & 0xFF; /* 两个字节的异或值 a ^ b */
+    return x ^ ((d << ns) | (d << ms)); /* 把 d 放到两个字节的位置上，再和 x 异或 */
 }
 
 /*
@@ -89,7 +131,16 @@ int byteSwap(int x, int n, int m) {
  *   Difficulty: 3
  */
 unsigned reverse(unsigned v) {
-    return 2;
+    unsigned r;
+    int i;
+    r = 0;                      /* r 用来存结果，一开始全是 0 */
+    i = 32;                     /* 一共要搬 32 位 */
+    while (i) {                 /* i 不为 0 就继续 */
+        r = (r << 1) | (v & 1); /* r 左移腾位置，把 v 的最低位放进来 */
+        v = v >> 1;             /* v 右移，扔掉已经搬走的最低位 */
+        i = i - 1;              /* 计数减 1 */
+    }
+    return r;
 }
 
 /*
@@ -101,7 +152,9 @@ unsigned reverse(unsigned v) {
  *   Difficulty: 3
  */
 int logicalShift(int x, int n) {
-    return 2;
+    int sign;
+    sign = x & (1 << 31);               /* 只保留符号位，其余清零 */
+    return (x >> n) ^ ((sign >> n) << 1); /* 把多补的 1 异或掉 */
 }
 
 /*
