@@ -166,7 +166,14 @@ int logicalShift(int x, int n) {
  *   Difficulty: 4
  */
 int leftBitCount(int x) {
-    return 2;
+    int n, s;
+    x = ~x;                              /* 数左边的1 变成 数左边的0 */
+    s = !(x >> 16) << 4; x = x << s; n = s;       /* 左边16位全是0？ */
+    s = !(x >> 24) << 3; x = x << s; n = n + s;   /* 左边8位全是0？ */
+    s = !(x >> 28) << 2; x = x << s; n = n + s;   /* 左边4位全是0？ */
+    s = !(x >> 30) << 1; x = x << s; n = n + s;   /* 左边2位全是0？ */
+    s = !(x >> 31);      x = x << s; n = n + s;   /* 最左1位是0？ */
+    return n + !x;                       /* 原来全是1时，x 是 0，再加 1 得 32 */
 }
 
 /*
@@ -178,8 +185,27 @@ int leftBitCount(int x) {
  *   Difficulty: 4
  */
 unsigned float_i2f(int x) {
-    return 2;
+    unsigned sign, a, e, frac, rnd;
+    if (!x) return 0;                  /* ① 0 的浮点表示就是全 0 */
+
+    sign = x & 0x80000000;             /* ② 取出符号位 */
+    a = x;
+    if (sign) a = -a;                  /* ③ 负数取绝对值 */
+
+    e = 158;                           /* ④ 规格化，同时算指数 */
+    while (a < 0x80000000) {
+        a = a << 1;
+        e = e - 1;
+    }
+
+    frac = (a >> 8) & 0x7FFFFF;        /* ⑤ 取出 23 位尾数，去掉开头的 1 */
+    rnd = a & 0xFF;                    /* ⑥ 被扔掉的低 8 位，用来舍入 */
+    if ((rnd > 0x80) | ((rnd == 0x80) & frac))
+        frac = frac + 1;
+
+    return sign + (e << 23) + frac;    /* ⑦ 三块拼起来 */
 }
+
 
 /*
  * floatScale2 - Return bit-level equivalent of expression 2*f for
@@ -193,7 +219,29 @@ unsigned float_i2f(int x) {
  *   Difficulty: 4
  */
 unsigned floatScale2(unsigned uf) {
-    return 2;
+    unsigned s, exp, frac;
+
+    /* ① 拆：把三个字段各自取出来 */
+    s    = uf >> 31;                 /* 符号位 */
+    exp  = (uf >> 23) & 0xFF;        /* 阶码 */
+    frac = uf & 0x7FFFFF;            /* 尾数 */
+
+    /* ② 判 + ③ 改：按三类分别处理 */
+    if (exp == 0xFF) return uf;                 /* NaN / 无穷：原样返回 */
+
+    if (exp == 0) {                             /* 非规格化数 */
+        frac = frac << 1;                       /* 尾数翻倍 */
+        if (frac >> 23) {                       /* 进位到阶码字段 */
+            exp = 1;
+            frac = frac & 0x7FFFFF;
+        }
+    } else {                                    /* 规格化数 */
+        exp = exp + 1;                          /* 阶码加 1 */
+        if (exp == 0xFF) frac = 0;              /* 溢出为无穷，尾数清零 */
+    }
+
+    /* ④ 组：拼回 32 位 */
+    return (s << 31) | (exp << 23) | frac;
 }
 
 /*
@@ -210,7 +258,21 @@ unsigned floatScale2(unsigned uf) {
  *   Difficulty: 3
  */
 int float64_f2i(unsigned uf1, unsigned uf2) {
-    return 2;
+    unsigned sign, exp, m;
+    int E, r;
+
+    sign = uf2 >> 31;                 /* 符号位 */
+    exp  = (uf2 >> 20) & 0x7FF;       /* 11 位阶码 */
+    E = exp - 1023;                   /* 真实指数 */
+
+    if (E < 0) return 0;              /* |x| < 1，向零舍入得 0 */
+    if (E > 30) return 0x80000000;    /* 超出 int 范围（含 NaN、无穷） */
+
+    m = (1 << 31) | ((uf2 & 0xFFFFF) << 11) | (uf1 >> 21);  /* 拼出 32 位有效数字 */
+    r = m >> (31 - E);                /* 右移定位小数点，同时截断小数部分 */
+
+    if (sign) r = -r;                 /* 恢复符号 */
+    return r;
 }
 
 /*
@@ -227,5 +289,8 @@ int float64_f2i(unsigned uf1, unsigned uf2) {
  *   Difficulty: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+    if (x > 127)   return 0x7F800000;      /* 太大：返回 +INF */
+    if (x >= -126) return (x + 127) << 23; /* 规格化数 */
+    if (x >= -149) return 1 << (x + 149);  /* 非规格化数 */
+    return 0;                              /* 太小：返回 0 */
 }
